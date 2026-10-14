@@ -1,0 +1,31 @@
+from sqlalchemy import Column, Integer, Float, String, Boolean, DateTime, Date, Text, ForeignKey
+from sqlalchemy.orm import relationship
+from database import Base
+
+{% for sheet in sheets %}
+class {{ sheet.model_name }}(Base):
+    __tablename__ = "{{ sheet.table_name }}"
+{% if not sheet.has_pk %}
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+{% endif %}
+{% for col in sheet.columns %}
+{% if col.is_primary_key %}
+    {{ col.python_name }} = Column({{ col.sa_type }}, primary_key=True, index=True{% if col.detected_type.value == 'int' %}, autoincrement=True{% endif %})
+{% elif col.is_foreign_key %}
+    {{ col.python_name }} = Column({{ col.sa_type }}, ForeignKey("{{ col.foreign_table }}.{{ col.foreign_column }}"), nullable={{ col.constraint.nullable }}, index=True)
+{% else %}
+    {{ col.python_name }} = Column({{ col.sa_type }}{% if col.constraint.unique %}, unique=True{% endif %}, nullable={{ col.constraint.nullable }})
+{% endif %}
+{% endfor %}
+
+{% for rel in relationships if rel.source_table == sheet.table_name %}
+    {{ rel.target_table }}_rel = relationship("{{ rel.target_model }}", back_populates="{{ sheet.table_name }}_items")
+{% endfor %}
+{% for rel in relationships if rel.target_table == sheet.table_name %}
+    {{ rel.source_table }}_items = relationship("{{ rel.source_model }}", back_populates="{{ sheet.table_name }}_rel")
+{% endfor %}
+
+    def __repr__(self):
+        return f"<{{ sheet.model_name }}({% for col in sheet.columns if col.is_primary_key %}{{ col.python_name }}={{ '{' }}self.{{ col.python_name }}{{ '}' }}{% endfor %})>"
+
+{% endfor %}

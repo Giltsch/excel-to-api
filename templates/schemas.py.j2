@@ -1,0 +1,62 @@
+from pydantic import BaseModel, Field, ConfigDict
+from typing import Optional, Any
+{% if has_email_type %}from pydantic import EmailStr
+{% endif %}
+{% if has_datetime_type or has_date_type %}from datetime import datetime, date
+{% endif %}
+{% if has_enum_type %}from enum import Enum
+{% endif %}
+
+{% for sheet in sheets %}
+{% for col in sheet.columns if col.detected_type.name == 'ENUM' and col.enum_entries %}
+class {{ sheet.model_name }}{{ col.python_name | capitalize_first }}Enum(str, Enum):
+{% for member_name, member_value in col.enum_entries %}
+    {{ member_name }} = "{{ member_value }}"
+{% endfor %}
+
+{% endfor %}
+class {{ sheet.model_name }}Base(BaseModel):
+{% set ns = namespace(has_fields=false) %}
+{% for col in sheet.columns if not col.is_primary_key %}
+{% set ns.has_fields = true %}
+    {{ col.python_name }}: {{ col.pydantic_annotation }}
+{% endfor %}
+{% if not ns.has_fields %}
+    pass
+{% endif %}
+
+class {{ sheet.model_name }}Create({{ sheet.model_name }}Base):
+{% if not sheet.pk_is_auto %}
+{% for col in sheet.columns if col.is_primary_key %}
+    {{ col.python_name }}: {{ col.pydantic_base_type }}
+{% endfor %}
+{% else %}
+    pass
+{% endif %}
+
+class {{ sheet.model_name }}Update(BaseModel):
+{% set ns2 = namespace(has_fields=false) %}
+{% for col in sheet.columns if not col.is_primary_key %}
+{% set ns2.has_fields = true %}
+    {{ col.python_name }}: Optional[{{ col.pydantic_base_type }}] = None
+{% endfor %}
+{% if not ns2.has_fields %}
+    pass
+{% endif %}
+
+class {{ sheet.model_name }}Read({{ sheet.model_name }}Base):
+{% for col in sheet.columns if col.is_primary_key %}
+    {{ col.python_name }}: {{ col.pydantic_base_type }}
+{% endfor %}
+{% if not sheet.has_pk %}
+    id: int
+{% endif %}
+    model_config = ConfigDict(from_attributes=True)
+
+{% endfor %}
+class PaginatedResponse(BaseModel):
+    items: list[Any]
+    total: int
+    page: int
+    page_size: int
+    pages: int

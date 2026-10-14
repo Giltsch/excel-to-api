@@ -1,0 +1,29 @@
+# Caddyfile — Reverse proxy for Excel-to-API with automatic HTTPS
+#
+# Usage:
+#   1. Replace YOUR_DOMAIN with your actual domain (e.g. excel2api.example.com)
+#   2. Point your domain's DNS A record to your server IP
+#   3. Install Caddy: apt install caddy  (or see https://caddyserver.com/docs/install)
+#   4. Copy this file to /etc/caddy/Caddyfile
+#   5. sudo systemctl reload caddy
+#
+# Caddy automatically obtains and renews Let's Encrypt certificates.
+
+YOUR_DOMAIN {
+	# Reverse proxy to Streamlit
+	reverse_proxy localhost:8501
+
+	# Security headers
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+
+	# Limit upload size (matches MAX_FILE_SIZE_MB)
+	request_body {
+		max_size 12MB
+	}
+}

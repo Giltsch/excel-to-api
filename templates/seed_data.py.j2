@@ -1,0 +1,69 @@
+"""Seed the database with data from the original Excel file."""
+import json
+from datetime import datetime, date
+from database import engine, SessionLocal, Base
+import models
+
+
+BOOL_TRUE = {"true", "yes", "ja", "1", "wahr", "aktiv", "active", "on"}
+BOOL_FALSE = {"false", "no", "nein", "0", "falsch", "inaktiv", "inactive", "off"}
+
+
+def _convert_bool(value):
+    """Convert boolean-like strings to actual booleans."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        if value.lower() in BOOL_TRUE:
+            return True
+        if value.lower() in BOOL_FALSE:
+            return False
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return False
+
+
+def seed():
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+
+    try:
+        with open("seed_data.json") as f:
+            data = json.load(f)
+
+{% for sheet in sheets %}
+        # Seed {{ sheet.table_name }}
+        existing = db.query(models.{{ sheet.model_name }}).count()
+        if existing == 0:
+            for row in data.get("{{ sheet.table_name }}", []):
+                if all(v is None for v in row.values()):
+                    continue
+{% for col in sheet.columns if col.detected_type.name in ('DATETIME', 'DATE') %}
+                if row.get("{{ col.python_name }}") and isinstance(row["{{ col.python_name }}"], str):
+                    try:
+                        row["{{ col.python_name }}"] = datetime.fromisoformat(row["{{ col.python_name }}"])
+                    except (ValueError, TypeError):
+                        row["{{ col.python_name }}"] = None
+{% endfor %}
+{% for col in sheet.columns if col.detected_type.name == 'BOOLEAN' %}
+                if "{{ col.python_name }}" in row:
+                    row["{{ col.python_name }}"] = _convert_bool(row["{{ col.python_name }}"])
+{% endfor %}
+                item = models.{{ sheet.model_name }}(
+                    **{k: v for k, v in row.items() if hasattr(models.{{ sheet.model_name }}, k)}
+                )
+                db.add(item)
+            db.commit()
+            print(f"Seeded {{ sheet.table_name }}: {len(data.get('{{ sheet.table_name }}', []))} rows")
+        else:
+            print(f"Skipped {{ sheet.table_name }}: already has {existing} rows")
+
+{% endfor %}
+    finally:
+        db.close()
+
+    print("Database seeding complete.")
+
+
+if __name__ == "__main__":
+    seed()

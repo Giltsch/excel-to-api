@@ -1,0 +1,20 @@
+services:
+  excel-to-api:
+    build: .
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PUBLIC_MODE=${PUBLIC_MODE:-true}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-anthropic/claude-sonnet-4}
+      - MAX_FILE_SIZE_MB=${MAX_FILE_SIZE_MB:-10}
+      - MAX_ROWS_PER_SHEET=${MAX_ROWS_PER_SHEET:-50000}
+      - RATE_LIMIT_UPLOADS=${RATE_LIMIT_UPLOADS:-10}
+    restart: unless-stopped
+    # Read-only filesystem for extra security (temp dirs still writable)
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/.streamlit

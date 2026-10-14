@@ -1,0 +1,93 @@
+from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
+import models
+import schemas
+import crud
+from database import engine, get_db
+
+models.Base.metadata.create_all(bind=engine)
+
+app = FastAPI(
+    title="{{ api_title }}",
+    description="Auto-generated REST API from Excel data",
+    version="1.0.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+{% for sheet in sheets %}
+# ---- {{ sheet.model_name }} endpoints ----
+
+@app.get("/{{ sheet.table_name }}", response_model=schemas.PaginatedResponse, tags=["{{ sheet.model_name }}"])
+def list_{{ sheet.table_name }}(
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=100, description="Items per page"),
+    search: str | None = Query(None, description="Search across text fields"),
+{% for col in sheet.columns if col.detected_type.name in ('STRING', 'TEXT', 'EMAIL', 'ENUM') %}
+    {{ col.python_name }}: str | None = Query(None, description="Filter by {{ col.original_name }}"),
+{% endfor %}
+{% for col in sheet.columns if col.detected_type.name in ('FLOAT', 'INTEGER') and not col.is_primary_key and not col.is_foreign_key %}
+    min_{{ col.python_name }}: float | None = Query(None, description="Min {{ col.original_name }}"),
+    max_{{ col.python_name }}: float | None = Query(None, description="Max {{ col.original_name }}"),
+{% endfor %}
+    db: Session = Depends(get_db),
+):
+    items, total = crud.get_{{ sheet.table_name }}_list(
+        db, page=page, page_size=page_size,
+{% for col in sheet.columns if col.detected_type.name in ('STRING', 'TEXT', 'EMAIL', 'ENUM') %}
+        {{ col.python_name }}={{ col.python_name }},
+{% endfor %}
+{% for col in sheet.columns if col.detected_type.name in ('FLOAT', 'INTEGER') and not col.is_primary_key and not col.is_foreign_key %}
+        min_{{ col.python_name }}=min_{{ col.python_name }},
+        max_{{ col.python_name }}=max_{{ col.python_name }},
+{% endfor %}
+        search=search,
+    )
+    pages = (total + page_size - 1) // page_size if total > 0 else 0
+    return schemas.PaginatedResponse(
+        items=[schemas.{{ sheet.model_name }}Read.model_validate(i) for i in items],
+        total=total,
+        page=page,
+        page_size=page_size,
+        pages=pages,
+    )
+
+
+@app.get("/{{ sheet.table_name }}/{item_id}", response_model=schemas.{{ sheet.model_name }}Read, tags=["{{ sheet.model_name }}"])
+def get_{{ sheet.table_name }}(item_id: {{ sheet.pk_python_type }}, db: Session = Depends(get_db)):
+    item = crud.get_{{ sheet.table_name }}_by_id(db, item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="{{ sheet.model_name }} not found")
+    return item
+
+
+@app.post("/{{ sheet.table_name }}", response_model=schemas.{{ sheet.model_name }}Read, status_code=201, tags=["{{ sheet.model_name }}"])
+def create_{{ sheet.table_name }}(data: schemas.{{ sheet.model_name }}Create, db: Session = Depends(get_db)):
+    return crud.create_{{ sheet.table_name }}(db, data)
+
+
+@app.put("/{{ sheet.table_name }}/{item_id}", response_model=schemas.{{ sheet.model_name }}Read, tags=["{{ sheet.model_name }}"])
+def update_{{ sheet.table_name }}(item_id: {{ sheet.pk_python_type }}, data: schemas.{{ sheet.model_name }}Update, db: Session = Depends(get_db)):
+    item = crud.update_{{ sheet.table_name }}(db, item_id, data)
+    if item is None:
+        raise HTTPException(status_code=404, detail="{{ sheet.model_name }} not found")
+    return item
+
+
+@app.delete("/{{ sheet.table_name }}/{item_id}", status_code=204, tags=["{{ sheet.model_name }}"])
+def delete_{{ sheet.table_name }}(item_id: {{ sheet.pk_python_type }}, db: Session = Depends(get_db)):
+    if not crud.delete_{{ sheet.table_name }}(db, item_id):
+        raise HTTPException(status_code=404, detail="{{ sheet.model_name }} not found")
+
+{% endfor %}
+
+@app.get("/", tags=["Health"])
+def health_check():
+    return {"status": "ok", "message": "API is running"}

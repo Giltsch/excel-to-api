@@ -1,0 +1,91 @@
+from sqlalchemy.orm import Session
+from sqlalchemy import or_
+import models
+import schemas
+
+{% for sheet in sheets %}
+# ---- {{ sheet.model_name }} CRUD ----
+
+def get_{{ sheet.table_name }}_list(
+    db: Session,
+    page: int = 1,
+    page_size: int = 20,
+{% for col in sheet.columns if col.detected_type.name in ('STRING', 'TEXT', 'EMAIL', 'ENUM') %}
+    {{ col.python_name }}: str | None = None,
+{% endfor %}
+{% for col in sheet.columns if col.detected_type.name in ('FLOAT', 'INTEGER') and not col.is_primary_key and not col.is_foreign_key %}
+    min_{{ col.python_name }}: float | None = None,
+    max_{{ col.python_name }}: float | None = None,
+{% endfor %}
+    search: str | None = None,
+) -> tuple[list, int]:
+    query = db.query(models.{{ sheet.model_name }})
+
+{% for col in sheet.columns if col.detected_type.name in ('STRING', 'TEXT', 'EMAIL', 'ENUM') %}
+    if {{ col.python_name }} is not None:
+        query = query.filter(
+            models.{{ sheet.model_name }}.{{ col.python_name }}.ilike(f"%{{ '{' }}{{ col.python_name }}{{ '}' }}%")
+        )
+{% endfor %}
+
+{% for col in sheet.columns if col.detected_type.name in ('FLOAT', 'INTEGER') and not col.is_primary_key and not col.is_foreign_key %}
+    if min_{{ col.python_name }} is not None:
+        query = query.filter(models.{{ sheet.model_name }}.{{ col.python_name }} >= min_{{ col.python_name }})
+    if max_{{ col.python_name }} is not None:
+        query = query.filter(models.{{ sheet.model_name }}.{{ col.python_name }} <= max_{{ col.python_name }})
+{% endfor %}
+
+{% set searchable = [] %}
+{% for col in sheet.columns if col.detected_type.name in ('STRING', 'TEXT', 'EMAIL') %}
+{% if searchable.append(col) %}{% endif %}
+{% endfor %}
+{% if searchable %}
+    if search is not None:
+        search_filter = or_(
+{% for col in searchable %}
+            models.{{ sheet.model_name }}.{{ col.python_name }}.ilike(f"%{search}%"),
+{% endfor %}
+        )
+        query = query.filter(search_filter)
+{% endif %}
+
+    total = query.count()
+    items = query.offset((page - 1) * page_size).limit(page_size).all()
+    return items, total
+
+
+def get_{{ sheet.table_name }}_by_id(db: Session, item_id) -> models.{{ sheet.model_name }} | None:
+    return db.query(models.{{ sheet.model_name }}).filter(
+        models.{{ sheet.model_name }}.{{ sheet.pk_column }} == item_id
+    ).first()
+
+
+def create_{{ sheet.table_name }}(db: Session, data: schemas.{{ sheet.model_name }}Create) -> models.{{ sheet.model_name }}:
+    db_item = models.{{ sheet.model_name }}(**data.model_dump())
+    db.add(db_item)
+    db.commit()
+    db.refresh(db_item)
+    return db_item
+
+
+def update_{{ sheet.table_name }}(db: Session, item_id, data: schemas.{{ sheet.model_name }}Update) -> models.{{ sheet.model_name }} | None:
+    db_item = get_{{ sheet.table_name }}_by_id(db, item_id)
+    if db_item is None:
+        return None
+    update_data = data.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_item, key, value)
+    db.commit()
+    db.refresh(db_item)
+    return db_item
+
+
+def delete_{{ sheet.table_name }}(db: Session, item_id) -> bool:
+    db_item = get_{{ sheet.table_name }}_by_id(db, item_id)
+    if db_item is None:
+        return False
+    db.delete(db_item)
+    db.commit()
+    return True
+
+{% endfor %}

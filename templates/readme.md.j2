@@ -1,0 +1,39 @@
+# {{ api_title }}
+
+Auto-generated REST API from Excel data.
+
+## Quick Start
+
+```bash
+pip install -r requirements.txt
+python seed_data.py
+uvicorn main:app --reload
+```
+
+Then open [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) to see the interactive API documentation.
+
+## Docker
+
+```bash
+docker build -t generated-api .
+docker run -p 8000:8000 generated-api
+```
+
+## Endpoints
+
+{% for sheet in sheets %}
+### {{ sheet.model_name }}
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/{{ sheet.table_name }}` | List all (paginated, filterable) |
+| GET | `/{{ sheet.table_name }}/{id}` | Get by ID |
+| POST | `/{{ sheet.table_name }}` | Create new |
+| PUT | `/{{ sheet.table_name }}/{id}` | Update |
+| DELETE | `/{{ sheet.table_name }}/{id}` | Delete |
+
+{% endfor %}
+
+## Database
+
+SQLite database stored in `data.db`. Run `python seed_data.py` to populate with original Excel data.

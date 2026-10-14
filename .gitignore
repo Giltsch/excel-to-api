@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Environment variables (contains secrets!)
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Generated output
+data/
+*.db
+*.sqlite3
+
+# Temp files
+*.tmp
+.pytest_cache/
+
+# Large third-party sample (not redistributable / too big for git)
+examples/Database-Overview-for-ecoinvent-*.xlsx
